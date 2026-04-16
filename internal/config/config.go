@@ -17,7 +17,7 @@ func Load() *Config {
 	return &Config{
 		HTTPAddr:  getEnv("HTTP_ADDR", ":8080"),
 		RedisURL:  getEnv("REDIS_URL", "redis://localhost:6379"),
-		PGDSN:     getEnv("PG_DSN", "postgres://postgres:postgres@localhost:5432/counter?sslmode=disable"),
+		PGDSN:     getEnv("PG_DSN", "postgres://pg:pg@localhost:5432/counter?sslmode=disable"),
 		FlushTick: getDuration("FLUSH_TICK", time.Second*10),
 	}
 }
