@@ -65,26 +65,19 @@ func main() {
 	r.Get("/posts/{id}/stats", h.HandleStats)
 	r.Get("/posts/batch", h.HandleBatch)
 
-	// Контекст для Flush, чтобы не потерять данные при shutdown
-	rootCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	flusher := worker.NewFlusher(redisRepo, postgresRepo, cfg.FlushTick)
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	flusher := worker.NewFlusher(redisRepo, postgresRepo, cfg.FlushTick)
-	flusherCtx, cancelFlusher := context.WithCancel(context.Background())
-	flusherDone := make(chan struct{})
-	go func() {
-		defer close(flusherDone)
-		flusher.Run(flusherCtx)
-	}()
+	go flusher.Run(ctx)
 
-	// http
 	server := &http.Server{
 		Addr:              cfg.HTTPAddr,
 		Handler:           r,
-		ReadHeaderTimeout: 5 * time.Second,  // максимум 5 секунд на присылание HTTP-заголовков
-		ReadTimeout:       15 * time.Second, // максимум 15 секунд на полное чтение запроса
-		WriteTimeout:      15 * time.Second, // максимум 15 секунд на запись ответа
-		IdleTimeout:       60 * time.Second, // максимум 60 секунд соединение без активности
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      15 * time.Second,
+		IdleTimeout:       60 * time.Second,
 	}
 	serverErr := make(chan error, 1)
 	go func() {
@@ -95,27 +88,18 @@ func main() {
 	}()
 
 	select {
-	case <-rootCtx.Done():
+	case <-ctx.Done():
 		slog.Info("shutdown signal received")
 		stop()
 	case err := <-serverErr:
 		slog.Error("server failed", "err", err)
 	}
 
-	// Shutdown
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Second*10)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		slog.Error("http shutdown failed", "err", err)
 	}
-	cancelFlusher()
-	<-flusherDone
-
-	if err := flusher.Flush(shutdownCtx); err != nil {
-		slog.Error("final flush failed", "err", err)
-	} else {
-		slog.Info("final flush complete")
-	}
-
 	slog.Info("shutdown complete")
+
 }
