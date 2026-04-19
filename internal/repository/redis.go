@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
@@ -21,10 +22,12 @@ type Stats struct {
 	Views int64
 }
 
+// Builder
 func NewRedisRepo(client *redis.Client) *RedisRepo {
 	return &RedisRepo{client: client}
 }
 
+// Keys
 func viewsKey(postID int64) string {
 	return fmt.Sprintf("views:%d", postID)
 }
@@ -42,16 +45,18 @@ func likedKey(postID int64) string {
 }
 
 // Viewed
-func (r *RedisRepo) IsViewed(ctx context.Context, postID int64, userID string) (bool, error) {
-	return r.client.SIsMember(ctx, viewedKey(postID), userID).Result()
-}
-
-func (r *RedisRepo) SetViewed(ctx context.Context, postID int64, userID string) error {
+func (r *RedisRepo) MarkViewed(ctx context.Context, postID int64, userID string) (bool, error) {
 	key := viewedKey(postID)
-	if err := r.client.SAdd(ctx, key, userID).Err(); err != nil {
-		return err
+	added, err := r.client.SAdd(ctx, key, userID).Result()
+	if err != nil {
+		return false, err
 	}
-	return r.client.Expire(ctx, key, viewedTTL).Err()
+	if added == 1 {
+		if err := r.client.Expire(ctx, key, viewedTTL).Err(); err != nil {
+			return false, err
+		}
+	}
+	return added == 1, nil
 }
 
 func (r *RedisRepo) IncrView(ctx context.Context, postID int64) error {
@@ -59,16 +64,22 @@ func (r *RedisRepo) IncrView(ctx context.Context, postID int64) error {
 }
 
 // Liked
-func (r *RedisRepo) IsLiked(ctx context.Context, postID int64, userID string) (bool, error) {
-	return r.client.SIsMember(ctx, likedKey(postID), userID).Result()
+func (r *RedisRepo) MarkLiked(ctx context.Context, postID int64, userID string) (bool, error) {
+	key := likedKey(postID)
+	added, err := r.client.SAdd(ctx, key, userID).Result()
+	if err != nil {
+		return false, err
+	}
+	return added == 1, nil
 }
 
-func (r *RedisRepo) SetLiked(ctx context.Context, postID int64, userID string) error {
-	return r.client.SAdd(ctx, likedKey(postID), userID).Err()
-}
-
-func (r *RedisRepo) RemoveLiked(ctx context.Context, postID int64, userID string) error {
-	return r.client.SRem(ctx, likedKey(postID), userID).Err()
+func (r *RedisRepo) UnmarkLiked(ctx context.Context, postID int64, userID string) (bool, error) {
+	key := likedKey(postID)
+	removed, err := r.client.SRem(ctx, key, userID).Result()
+	if err != nil {
+		return false, err
+	}
+	return removed == 1, nil
 }
 
 func (r *RedisRepo) IncrLike(ctx context.Context, postID int64) error {
@@ -84,13 +95,13 @@ func (r *RedisRepo) GetStats(ctx context.Context, postID int64) (*Stats, error) 
 	stat := &Stats{}
 
 	views, err := r.client.Get(ctx, viewsKey(postID)).Int64()
-	if err != nil && err != redis.Nil {
+	if err != nil && !errors.Is(err, redis.Nil) {
 		return nil, err
 	}
 	stat.Views = views
 
 	likes, err := r.client.Get(ctx, likesKey(postID)).Int64()
-	if err != nil && err != redis.Nil {
+	if err != nil && !errors.Is(err, redis.Nil) {
 		return nil, err
 	}
 	stat.Likes = likes
@@ -100,6 +111,9 @@ func (r *RedisRepo) GetStats(ctx context.Context, postID int64) (*Stats, error) 
 
 func (r *RedisRepo) MGetStats(ctx context.Context, postID []int64) ([]*Stats, error) {
 	n := len(postID)
+	if n == 0 {
+		return nil, nil
+	}
 
 	keys := make([]string, n*2)
 	for i, id := range postID {
@@ -108,7 +122,7 @@ func (r *RedisRepo) MGetStats(ctx context.Context, postID []int64) ([]*Stats, er
 	}
 
 	vals, err := r.client.MGet(ctx, keys...).Result()
-	if err != nil && err != redis.Nil {
+	if err != nil {
 		return nil, err
 	}
 
@@ -133,7 +147,7 @@ func (r *RedisRepo) AddToDirty(ctx context.Context, postID int64) error {
 
 func (r *RedisRepo) PopDirty(ctx context.Context) ([]int64, error) {
 	strs, err := r.client.SPopN(ctx, dirtyKey, 10000).Result()
-	if err != nil && err != redis.Nil {
+	if err != nil {
 		return nil, err
 	}
 	out := make([]int64, 0, len(strs))
@@ -162,7 +176,7 @@ func (r *RedisRepo) PopDeltasBatch(ctx context.Context, postIDs []int64) (map[in
 	}
 
 	// Exec может вернуть redis.Nil, если хотя бы один ключ отсутствовал — это ок.
-	if _, err := pipe.Exec(ctx); err != nil && err != redis.Nil {
+	if _, err := pipe.Exec(ctx); err != nil && !errors.Is(err, redis.Nil) {
 		return nil, err
 	}
 

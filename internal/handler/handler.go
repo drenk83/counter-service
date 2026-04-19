@@ -144,7 +144,7 @@ func (h *Handler) HandleStats(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) HandleBatch(w http.ResponseWriter, r *http.Request) {
 	postIDs, err := parseBatchPostIDS(r)
-	if err != nil {
+	if err != nil || len(postIDs) == 0 {
 		http.Error(w, "invalid posts id", http.StatusBadRequest)
 		return
 	}
