@@ -3,6 +3,7 @@ module github.com/drenk83/counter-service
 go 1.26.2
 
 require (
+	github.com/go-chi/chi/v5 v5.2.5
 	github.com/jackc/pgx/v5 v5.9.1
 	github.com/joho/godotenv v1.5.1
 	github.com/redis/go-redis/v9 v9.18.0

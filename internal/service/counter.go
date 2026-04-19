@@ -24,6 +24,7 @@ type RedisRepository interface {
 
 type PostgresRepository interface {
 	GetStats(ctx context.Context, postID int64) (*repository.Stats, error)
+	GetStatsBatch(ctx context.Context, postIDs []int64) (map[int64]repository.Stats, error)
 }
 
 type CounterService struct {
@@ -108,4 +109,25 @@ func (s *CounterService) GetStats(ctx context.Context, postID int64) (*repositor
 		Views: redisStat.Views + postgStat.Views,
 		Likes: redisStat.Likes + postgStat.Likes,
 	}, nil
+}
+
+func (s *CounterService) GetStatsBatch(ctx context.Context, postIDs []int64) ([]*repository.Stats, error) {
+	redisStats, err := s.redis.MGetStats(ctx, postIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	postgStats, err := s.postgres.GetStatsBatch(ctx, postIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	stats := make([]*repository.Stats, len(postIDs))
+	for i, id := range postIDs {
+		stats[i] = &repository.Stats{
+			Views: redisStats[i].Views + postgStats[id].Views,
+			Likes: redisStats[i].Likes + postgStats[id].Likes,
+		}
+	}
+	return stats, nil
 }
