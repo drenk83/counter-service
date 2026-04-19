@@ -34,6 +34,7 @@ func main() {
 		slog.Error("failed to connect to redis", "err", err)
 		os.Exit(1)
 	}
+	defer rdb.Close()
 
 	// Postgres
 	db, err := pgxpool.New(context.Background(), cfg.PGDSN)
@@ -45,6 +46,7 @@ func main() {
 		slog.Error("failed to connect to postgres", "err", err)
 		os.Exit(1)
 	}
+	defer db.Close()
 
 	redisRepo := repository.NewRedisRepo(rdb)
 	postgresRepo := repository.NewPostgresRepo(db)
@@ -52,7 +54,6 @@ func main() {
 	h := handler.NewHandler(srv)
 
 	r := chi.NewRouter()
-
 	r.Post("/posts/{id}/view", h.HandleView)
 	r.Post("/posts/{id}/like", h.HandleLike)
 	r.Delete("/posts/{id}/like", h.HandleUnlike)
