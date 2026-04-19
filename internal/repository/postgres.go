@@ -34,6 +34,12 @@ func (p *PostgresRepo) FlushStatsBatch(ctx context.Context, deltas map[int64]Sta
 	if len(deltas) == 0 {
 		return nil
 	}
+	tx, err := p.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
 	batch := &pgx.Batch{}
 	for postID, s := range deltas {
 		batch.Queue(`
@@ -45,14 +51,17 @@ func (p *PostgresRepo) FlushStatsBatch(ctx context.Context, deltas map[int64]Sta
                 updated_at = now()
         `, postID, s.Views, s.Likes)
 	}
-	br := p.db.SendBatch(ctx, batch)
-	defer br.Close()
+	br := tx.SendBatch(ctx, batch)
 	for i := 0; i < len(deltas); i++ {
 		if _, err := br.Exec(); err != nil {
+			br.Close()
 			return err
 		}
 	}
-	return nil
+	if err := br.Close(); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 func (p *PostgresRepo) GetStats(ctx context.Context, postID int64) (*Stats, error) {

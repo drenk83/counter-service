@@ -40,10 +40,11 @@ func (s *CounterService) AddView(ctx context.Context, postID int64, userID strin
 		return err
 	}
 	if ok {
-		if err := s.redis.IncrView(ctx, postID); err != nil {
+		bgCtx := context.WithoutCancel(ctx)
+		if err := s.redis.IncrView(bgCtx, postID); err != nil {
 			return err
 		}
-		if err := s.redis.AddToDirty(ctx, postID); err != nil {
+		if err := s.redis.AddToDirty(bgCtx, postID); err != nil {
 			return err
 		}
 	}
@@ -56,10 +57,11 @@ func (s *CounterService) AddLike(ctx context.Context, postID int64, userID strin
 		return err
 	}
 	if ok {
-		if err := s.redis.IncrLike(ctx, postID); err != nil {
+		bgCtx := context.WithoutCancel(ctx)
+		if err := s.redis.IncrLike(bgCtx, postID); err != nil {
 			return err
 		}
-		if err := s.redis.AddToDirty(ctx, postID); err != nil {
+		if err := s.redis.AddToDirty(bgCtx, postID); err != nil {
 			return err
 		}
 	}
@@ -72,10 +74,11 @@ func (s *CounterService) RemoveLike(ctx context.Context, postID int64, userID st
 		return err
 	}
 	if ok {
-		if err := s.redis.DecrLike(ctx, postID); err != nil {
+		bgCtx := context.WithoutCancel(ctx)
+		if err := s.redis.DecrLike(bgCtx, postID); err != nil {
 			return err
 		}
-		if err := s.redis.AddToDirty(ctx, postID); err != nil {
+		if err := s.redis.AddToDirty(bgCtx, postID); err != nil {
 			return err
 		}
 	}
