@@ -40,6 +40,7 @@ func (s *CounterService) AddView(ctx context.Context, postID int64, userID strin
 		return err
 	}
 	if ok {
+		// чтобы не потерять данные, когда HTTP-коннект рвется
 		bgCtx := context.WithoutCancel(ctx)
 		if err := s.redis.IncrView(bgCtx, postID); err != nil {
 			return err
@@ -57,6 +58,7 @@ func (s *CounterService) AddLike(ctx context.Context, postID int64, userID strin
 		return err
 	}
 	if ok {
+		// чтобы не потерять данные, когда HTTP-коннект рвется
 		bgCtx := context.WithoutCancel(ctx)
 		if err := s.redis.IncrLike(bgCtx, postID); err != nil {
 			return err
@@ -74,6 +76,7 @@ func (s *CounterService) RemoveLike(ctx context.Context, postID int64, userID st
 		return err
 	}
 	if ok {
+		// чтобы не потерять данные, когда HTTP-коннект рвется
 		bgCtx := context.WithoutCancel(ctx)
 		if err := s.redis.DecrLike(bgCtx, postID); err != nil {
 			return err

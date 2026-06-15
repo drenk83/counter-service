@@ -28,18 +28,18 @@ func NewRedisRepo(client *redis.Client) *RedisRepo {
 }
 
 // Keys
+// Counters, for stats
 func viewsKey(postID int64) string {
 	return fmt.Sprintf("views:%d", postID)
 }
-
 func likesKey(postID int64) string {
 	return fmt.Sprintf("likes:%d", postID)
 }
 
+// Set, to verify uniqueness
 func viewedKey(postID int64) string {
 	return fmt.Sprintf("viewed:%d", postID)
 }
-
 func likedKey(postID int64) string {
 	return fmt.Sprintf("liked:%d", postID)
 }
@@ -51,6 +51,7 @@ func (r *RedisRepo) MarkViewed(ctx context.Context, postID int64, userID string)
 	if err != nil {
 		return false, err
 	}
+	// Set 24h TTL on first view
 	if added == 1 {
 		if err := r.client.Expire(ctx, key, viewedTTL).Err(); err != nil {
 			return false, err
@@ -95,12 +96,14 @@ func (r *RedisRepo) GetStats(ctx context.Context, postID int64) (*Stats, error) 
 	stat := &Stats{}
 
 	views, err := r.client.Get(ctx, viewsKey(postID)).Int64()
+	// if key doesnt exist - skip, views = 0
 	if err != nil && !errors.Is(err, redis.Nil) {
 		return nil, err
 	}
 	stat.Views = views
 
 	likes, err := r.client.Get(ctx, likesKey(postID)).Int64()
+	// if key doesnt exist - skip, likes = 0
 	if err != nil && !errors.Is(err, redis.Nil) {
 		return nil, err
 	}
@@ -138,7 +141,6 @@ func (r *RedisRepo) MGetStats(ctx context.Context, postID []int64) ([]*Stats, er
 		stats[i] = stat
 	}
 	return stats, nil
-
 }
 
 func (r *RedisRepo) AddToDirty(ctx context.Context, postID int64) error {
